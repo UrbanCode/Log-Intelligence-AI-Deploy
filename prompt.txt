@@ -1,0 +1,12 @@
+Return plain text only.
+Do not use Markdown.
+Do not use code fences.
+Do not use tables.
+
+Analyze each error and provide:
+1) Problem Summary
+2) Likely Root Cause
+3) Suggested Fix
+4) Suggested verification steps
+5) Defect details
+
