@@ -3,7 +3,6 @@ package com.logai.deploy.parser;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.logai.deploy.analysis.ErrorSummary;
-import com.logai.deploy.util.MaskUtil;
 import org.springframework.stereotype.Service;
 
 import java.io.BufferedReader;
@@ -51,29 +50,6 @@ public class LogParserService {
                             + "(?:[.,]\\d{3})?\\s*"
             );
 
-    private static final Pattern CHANNEL_ID_PATTERN =
-            Pattern.compile(
-                    "\\bch=[0-9a-fA-F]{6,}\\b"
-            );
-
-    private static final Pattern HEX_TOKEN_PATTERN =
-            Pattern.compile(
-                    "\\b[0-9a-fA-F]{8,}\\b"
-            );
-
-    private static final Pattern PORT_PATTERN =
-            Pattern.compile(
-                    "(?<=:)\\d{2,5}\\b"
-            );
-
-    private static final Pattern NUMBER_PATTERN =
-            Pattern.compile(
-                    "\\b\\d{4,}\\b"
-            );
-
-    private static final Pattern SPACE_PATTERN =
-            Pattern.compile("\\s+");
-
     private static final Pattern BRACKET_LOG_LEVEL_PATTERN =
             Pattern.compile(
                     "\\[(ERROR|FATAL)]",
@@ -83,7 +59,7 @@ public class LogParserService {
     private static final Pattern PLAIN_LOG_LEVEL_PATTERN =
             Pattern.compile(
                     "(?i)^(?:\\d{4}-\\d{2}-\\d{2}[ T]\\d{2}:\\d{2}:\\d{2}(?:[.,]\\d{3})?\\s+)?"
-                            + "(?:\\[[^\\]]+\\]\\s+)?"
+                            + "(?:\\[[^]]+]\\s+)?"
                             + "(ERROR|FATAL)(?:\\s|$)"
             );
 
@@ -121,14 +97,10 @@ public class LogParserService {
     };
 
     private final ObjectMapper mapper;
-    private final MaskUtil maskUtil;
 
-    public LogParserService(
-            ObjectMapper mapper,
-            MaskUtil maskUtil) {
+    public LogParserService(ObjectMapper mapper) {
 
         this.mapper = mapper;
-        this.maskUtil = maskUtil;
     }
 
     public Map<String, ErrorSummary> extractErrorSummary(
@@ -145,38 +117,35 @@ public class LogParserService {
                 continue;
             }
 
-            JsonNode originalJson =
-                    tryParseJson(line);
+            JsonNode originalJson = tryParseJson(line);
 
             if (!isErrorLogLevel(line, originalJson)) {
                 continue;
             }
 
-            /*
-             * Sensitive information is masked before the
-             * signature/sample is stored.
-             */
-            String maskedLine = maskUtil.mask(line);
-
             String timestamp =
                     extractTimestamp(line, originalJson);
 
             String signature =
-                    buildSignature(maskedLine);
+                    buildSignature(line, originalJson);
+
+            String finalSignature = signature;
+            String finalLine = line;
+            String finalTimestamp = timestamp;
 
             summary.compute(
-                    signature,
+                    finalSignature,
                     (key, existing) -> {
 
                         if (existing == null) {
                             return new ErrorSummary(
-                                    signature,
-                                    maskedLine,
-                                    timestamp
+                                    finalSignature,
+                                    finalLine,
+                                    finalTimestamp
                             );
                         }
 
-                        existing.addOccurrence(timestamp);
+                        existing.addOccurrence(finalTimestamp);
                         return existing;
                     }
             );
@@ -221,47 +190,43 @@ public class LogParserService {
                 || "FATAL".equalsIgnoreCase(level);
     }
 
-    private String buildSignature(String maskedLine) {
+    private String buildSignature(
+            String line,
+            JsonNode json) {
 
-        JsonNode node = tryParseJson(maskedLine);
-
-        if (node == null || !node.isObject()) {
-            return normalizeSignature(maskedLine);
+        if (json == null || !json.isObject()) {
+            return line.trim();
         }
 
         String level =
                 readNodeText(
-                        node,
+                        json,
                         JSON_LEVEL_FIELDS
                 );
 
         String thread =
                 readNodeText(
-                        node,
+                        json,
                         JSON_THREAD_FIELDS
                 );
 
         String logger =
                 readNodeText(
-                        node,
+                        json,
                         JSON_LOGGER_FIELDS
                 );
 
         String message =
                 readNodeText(
-                        node,
+                        json,
                         JSON_MESSAGE_FIELDS
                 );
 
         if (message.isBlank()) {
-            return normalizeSignature(maskedLine);
+            return line.trim();
         }
 
-        String normalizedMessage =
-                normalizeSignature(message);
-
-        StringBuilder signature =
-                new StringBuilder();
+        StringBuilder signature = new StringBuilder();
 
         if (!level.isBlank()) {
             signature
@@ -283,7 +248,7 @@ public class LogParserService {
                     .append(" - ");
         }
 
-        signature.append(normalizedMessage);
+        signature.append(message);
 
         return signature.toString().trim();
     }
@@ -307,41 +272,6 @@ public class LogParserService {
         return "";
     }
 
-    private String normalizeSignature(String value) {
-
-        String normalized =
-                LEADING_TS
-                        .matcher(value)
-                        .replaceFirst("");
-
-        normalized =
-                CHANNEL_ID_PATTERN
-                        .matcher(normalized)
-                        .replaceAll("ch=[CHAN]");
-
-        normalized =
-                HEX_TOKEN_PATTERN
-                        .matcher(normalized)
-                        .replaceAll("[HEX]");
-
-        normalized =
-                PORT_PATTERN
-                        .matcher(normalized)
-                        .replaceAll("[PORT]");
-
-        normalized =
-                NUMBER_PATTERN
-                        .matcher(normalized)
-                        .replaceAll("[NUM]");
-
-        normalized =
-                SPACE_PATTERN
-                        .matcher(normalized)
-                        .replaceAll(" ")
-                        .trim();
-
-        return normalized;
-    }
 
     private String extractTimestamp(
             String line,

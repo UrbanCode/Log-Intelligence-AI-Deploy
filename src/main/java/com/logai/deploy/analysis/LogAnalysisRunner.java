@@ -4,6 +4,7 @@ import com.logai.deploy.ai.AiAnalysisService;
 import com.logai.deploy.parser.LogParserService;
 import com.logai.deploy.ai.OllamaModelStartupChecker;
 import com.logai.deploy.cli.CliOptions;
+import com.logai.deploy.config.AiModelConfig;
 import com.logai.deploy.config.MaskProperties;
 import com.logai.deploy.util.Spinner;
 import org.springframework.stereotype.Component;
@@ -12,18 +13,20 @@ import java.io.BufferedReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.time.Duration;
+import java.time.Instant;
 import java.util.Comparator;
 import java.util.List;
+import java.util.Locale;
 import java.util.Map;
 
 @Component
 public class LogAnalysisRunner {
 
-    private static final int MAX_AI_ERRORS = 5;
-
     private final LogParserService parser;
     private final AiAnalysisService ai;
     private final OllamaModelStartupChecker modelChecker;
+    private final AiModelConfig aiModelConfig;
     private final MaskProperties maskProperties;
     private final AnalysisReportService reportService;
 
@@ -31,12 +34,14 @@ public class LogAnalysisRunner {
             LogParserService parser,
             AiAnalysisService ai,
             OllamaModelStartupChecker modelChecker,
+            AiModelConfig aiModelConfig,
             MaskProperties maskProperties,
             AnalysisReportService reportService) {
 
         this.parser = parser;
         this.ai = ai;
         this.modelChecker = modelChecker;
+        this.aiModelConfig = aiModelConfig;
         this.maskProperties = maskProperties;
         this.reportService = reportService;
     }
@@ -119,21 +124,54 @@ public class LogAnalysisRunner {
 
         printErrorDetails(sortedErrors);
 
-        List<ErrorSummary> topErrorsForAi =
-                sortedErrors.stream()
-                        .limit(MAX_AI_ERRORS)
+        int maxAiErrors =
+                options.hasAiMaxErrors()
+                        ? options.aiMaxErrors()
+                        : aiModelConfig == null
+                        ? 5
+                        : aiModelConfig.getMaxAiErrors();
+
+        boolean analyzeAllErrors = maxAiErrors <= 0;
+
+        List<ErrorSummary> errorsForAi =
+                analyzeAllErrors
+                        ? sortedErrors
+                        : sortedErrors.stream()
+                        .limit(maxAiErrors)
                         .toList();
+
+        String aiScopeLabel =
+                analyzeAllErrors
+                        ? "All Errors"
+                        : "Top " + maxAiErrors + " Errors";
+
+        System.out.println(
+                "Generating AI analysis ("
+                        + aiScopeLabel
+                        + "). This may take some time for large logs..."
+        );
+
+        Instant aiStart = Instant.now();
 
         String aiResult =
                 ai.analyze(
-                        topErrorsForAi,
+                        errorsForAi,
                         promptText
                 );
 
+        Duration aiDuration = Duration.between(aiStart, Instant.now());
+        double aiDurationSeconds = aiDuration.toMillis() / 1000.0;
+
         System.out.println(
-                "===== AI ANALYSIS (Top "
-                        + MAX_AI_ERRORS
-                        + " Errors) =====\n"
+                "AI analysis completed in "
+                        + String.format(Locale.ROOT, "%.3f", aiDurationSeconds)
+                        + "s."
+        );
+
+        System.out.println(
+                "===== AI ANALYSIS ("
+                        + aiScopeLabel
+                        + ") =====\n"
         );
 
         System.out.println(aiResult);

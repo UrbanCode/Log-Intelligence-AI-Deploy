@@ -7,6 +7,7 @@ import java.nio.file.Path;
 
 import static org.junit.jupiter.api.Assertions.assertEquals;
 import static org.junit.jupiter.api.Assertions.assertFalse;
+import static org.junit.jupiter.api.Assertions.assertThrows;
 import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
@@ -79,6 +80,20 @@ class CliOptionsParserTests {
     }
 
     @Test
+    void parsesAiMaxErrors() {
+
+        CliOptions options =
+                new CliOptionsParser(
+                        new DefaultApplicationArguments(
+                                "--inputLog=application.log",
+                                "--aiMaxErrors=25"
+                        )
+                ).parse();
+
+        assertEquals(25, options.aiMaxErrors());
+    }
+
+    @Test
     void skipAiModelCheckDefaultsToFalse() {
 
         CliOptions options =
@@ -105,6 +120,24 @@ class CliOptionsParserTests {
 
         assertNull(options.maskConfig());
         assertNull(options.aiPrompt());
+        assertNull(options.aiMaxErrors());
+    }
+
+    @Test
+    void invalidAiMaxErrorsThrowsException() {
+
+        IllegalArgumentException ex =
+                assertThrows(
+                        IllegalArgumentException.class,
+                        () -> new CliOptionsParser(
+                                new DefaultApplicationArguments(
+                                        "--inputLog=application.log",
+                                        "--aiMaxErrors=abc"
+                                )
+                        ).parse()
+                );
+
+        assertTrue(ex.getMessage().contains("--aiMaxErrors"));
     }
 
     @Test

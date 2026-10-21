@@ -11,4 +11,5 @@ import org.springframework.stereotype.Component;
 @Setter
 public class AiModelConfig {
     private String systemPrompt;
+    private int maxAiErrors = 5;
 }

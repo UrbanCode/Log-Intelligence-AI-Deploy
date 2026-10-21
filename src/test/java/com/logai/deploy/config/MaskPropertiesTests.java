@@ -17,7 +17,7 @@ class MaskPropertiesTests {
         MaskProperties properties =
                 new MaskProperties();
 
-        assertTrue(properties.isIp());
+        assertTrue(properties.isIpPort());
         assertTrue(properties.isEmail());
         assertTrue(properties.isUuid());
         assertTrue(properties.isMac());
@@ -26,7 +26,6 @@ class MaskPropertiesTests {
         assertTrue(properties.isCn());
         assertTrue(properties.isId());
         assertTrue(properties.isFingerprint());
-        assertTrue(properties.isFilePath());
     }
 
     @Test
@@ -39,7 +38,7 @@ class MaskPropertiesTests {
         Files.writeString(
                 config,
                 """
-                mask.ip=false
+                mask.ip_port=false
                 mask.email=false
                 mask.uuid=true
                 mask.mac=false
@@ -48,7 +47,6 @@ class MaskPropertiesTests {
                 mask.cn=false
                 mask.id=true
                 mask.fingerprint=false
-                mask.filepath=false
                 """
         );
 
@@ -59,7 +57,7 @@ class MaskPropertiesTests {
                 config.toString()
         );
 
-        assertFalse(properties.isIp());
+        assertFalse(properties.isIpPort());
         assertFalse(properties.isEmail());
         assertTrue(properties.isUuid());
         assertFalse(properties.isMac());
@@ -68,6 +66,5 @@ class MaskPropertiesTests {
         assertFalse(properties.isCn());
         assertTrue(properties.isId());
         assertFalse(properties.isFingerprint());
-        assertFalse(properties.isFilePath());
     }
 }
