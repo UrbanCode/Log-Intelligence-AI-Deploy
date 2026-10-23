@@ -1,12 +1,24 @@
-package com.logai.deploy.util;
+package com.logai.deploy.ai;
 
 import com.logai.deploy.config.MaskProperties;
+import org.springframework.ai.chat.client.ChatClientRequest;
+import org.springframework.ai.chat.client.ChatClientResponse;
+import org.springframework.ai.chat.client.advisor.api.CallAdvisor;
+import org.springframework.ai.chat.client.advisor.api.CallAdvisorChain;
+import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.prompt.Prompt;
+import org.springframework.core.Ordered;
+import org.jspecify.annotations.NonNull;
 import org.springframework.stereotype.Component;
 
+import java.util.ArrayList;
+import java.util.List;
 import java.util.regex.Pattern;
 
 @Component
-public class MaskUtil {
+public class PIIMaskingAdvisor implements CallAdvisor {
 
     private static final String REDACTED_IP = "[REDACTED_IP]";
     private static final String REDACTED_EMAIL = "[REDACTED_EMAIL]";
@@ -17,7 +29,8 @@ public class MaskUtil {
     private static final String REDACTED_CN = "[REDACTED_CN]";
     private static final String REDACTED_ID = "[REDACTED_ID]";
     private static final String REDACTED_FINGERPRINT = "[REDACTED_FINGERPRINT]";
-    private static final String REDACTED_FILEPATH = "[REDACTED_FILEPATH]";
+    private static final String REDACTED_CHANNEL = "ch=[CHAN]";
+    private static final String REDACTED_REDACTED_IP_PORT = "[REDACTED_IP]:[PORT]";
 
     private static final Pattern IPV4_PATTERN =
             Pattern.compile(
@@ -49,6 +62,16 @@ public class MaskUtil {
                             + "[0-9a-f]{4}-"
                             + "[0-9a-f]{12}"
                             + "(?![0-9a-f])"
+            );
+
+    private static final Pattern CHANNEL_ID_PATTERN =
+            Pattern.compile(
+                    "\\bch=[0-9a-fA-F]{6,}\\b"
+            );
+
+    private static final Pattern REDACTED_IP_PORT_PATTERN =
+            Pattern.compile(
+                    "\\[REDACTED_IP]:(\\d{2,5})\\b"
             );
 
     private static final Pattern MAC_PATTERN =
@@ -87,25 +110,36 @@ public class MaskUtil {
                     "(?i)jdbc:[^\\s,\"'}]+"
             );
 
-    /*
-     * Supports:
-     *
-     * Windows:
-     * C:\temp\application.log
-     *
-     * Unix/Linux:
-     * /var/log/application/error.log
-     */
-    private static final Pattern FILEPATH_PATTERN =
-            Pattern.compile(
-                    "(?:[a-zA-Z]:)?"
-                            + "(?:[\\\\/][\\w. @-]+)+"
-            );
-
     private final MaskProperties properties;
 
-    public MaskUtil(MaskProperties properties) {
+    public PIIMaskingAdvisor(MaskProperties properties) {
         this.properties = properties;
+    }
+
+    @Override
+    @NonNull
+    public String getName() {
+        return "piiMaskingAdvisor";
+    }
+
+    @Override
+    public int getOrder() {
+        return Ordered.HIGHEST_PRECEDENCE;
+    }
+
+    @Override
+    @NonNull
+    public ChatClientResponse adviseCall(
+            @NonNull ChatClientRequest request,
+            @NonNull CallAdvisorChain chain) {
+
+        Prompt maskedPrompt = maskPrompt(request.prompt());
+
+        return chain.nextCall(
+                request.mutate()
+                        .prompt(maskedPrompt)
+                        .build()
+        );
     }
 
     public String mask(String line) {
@@ -150,7 +184,7 @@ public class MaskUtil {
         /*
          * IP
          */
-        if (properties.isIp()) {
+        if (properties.isIpPort()) {
             value = replace(
                     value,
                     IPV4_PATTERN,
@@ -230,18 +264,50 @@ public class MaskUtil {
             );
         }
 
-        /*
-         * Windows file path
-         */
-        if (properties.isFilePath()) {
-            value = replace(
-                    value,
-                    FILEPATH_PATTERN,
-                    REDACTED_FILEPATH
-            );
-        }
+        value = replace(
+                value,
+                CHANNEL_ID_PATTERN,
+                REDACTED_CHANNEL
+        );
+
+
+        value = replace(
+                value,
+                REDACTED_IP_PORT_PATTERN,
+                REDACTED_REDACTED_IP_PORT
+        );
 
         return value;
+    }
+
+    private Prompt maskPrompt(Prompt prompt) {
+
+        List<Message> maskedMessages =
+                new ArrayList<>();
+
+        for (Message message : prompt.getInstructions()) {
+
+            if (message instanceof UserMessage) {
+                maskedMessages.add(
+                        new UserMessage(mask(message.getText()))
+                );
+                continue;
+            }
+
+            if (message instanceof SystemMessage) {
+                maskedMessages.add(
+                        new SystemMessage(mask(message.getText()))
+                );
+                continue;
+            }
+
+            maskedMessages.add(message);
+        }
+
+        return new Prompt(
+                maskedMessages,
+                prompt.getOptions()
+        );
     }
 
     private static String replace(
@@ -253,3 +319,5 @@ public class MaskUtil {
                 .replaceAll(replacement);
     }
 }
+
+

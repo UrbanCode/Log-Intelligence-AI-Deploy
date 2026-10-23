@@ -2,8 +2,6 @@ package com.logai.deploy.parser;
 
 import com.fasterxml.jackson.databind.ObjectMapper;
 import com.logai.deploy.analysis.ErrorSummary;
-import com.logai.deploy.config.MaskProperties;
-import com.logai.deploy.util.MaskUtil;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
@@ -22,21 +20,11 @@ class LogParserServiceTests {
 
     @BeforeEach
     void setUp() {
-
-        MaskProperties maskProperties =
-                new MaskProperties();
-
-        MaskUtil maskUtil =
-                new MaskUtil(maskProperties);
-
         ObjectMapper objectMapper =
                 new ObjectMapper();
 
         parser =
-                new LogParserService(
-                        objectMapper,
-                        maskUtil
-                );
+                new LogParserService(objectMapper);
     }
 
     private BufferedReader reader(String content) {
@@ -72,9 +60,19 @@ class LogParserServiceTests {
                 summary.keySet()
                         .stream()
                         .anyMatch(signature ->
-                                signature.contains("[REDACTED_HOST]")
-                                        || signature.contains("[REDACTED_EMAIL]")
-                                        || signature.contains("[REDACTED_IP]")
+                                signature.contains("host=server1")
+                                        || signature.contains("john@example.com")
+                                        || signature.contains("10.1.2.3")
+                        )
+        );
+
+        assertFalse(
+                summary.keySet()
+                        .stream()
+                        .anyMatch(signature ->
+                                signature.contains("[REDACTED_")
+                                        || signature.contains("[CHAN]")
+                                        || signature.contains("[PORT]")
                         )
         );
     }
@@ -153,11 +151,13 @@ class LogParserServiceTests {
 
         assertTrue(signature.contains("[ERROR]"));
         assertTrue(signature.contains("Connection refused"));
+        assertTrue(signature.contains("localhost:7919"));
         assertFalse(signature.startsWith("{"));
+        assertFalse(signature.contains("[REDACTED_"));
     }
 
     @Test
-    void groupsRepeatedJsonErrorsIntoSingleSignature() throws IOException {
+    void distinguishesJsonErrorsWithDifferentRawMessages() throws IOException {
 
         String logs = String.join("\n",
                 "{\"timestamp\":\"2026-08-11T10:00:00Z\",\"level\":\"ERROR\",\"message\":\"Connection refused host=server1\"}",
@@ -168,14 +168,19 @@ class LogParserServiceTests {
         Map<String, ErrorSummary> summary =
                 parser.extractErrorSummary(reader(logs));
 
-        assertEquals(1, summary.size());
+        assertEquals(3, summary.size());
 
-        ErrorSummary info =
-                summary.values()
-                        .iterator()
-                        .next();
+        assertTrue(
+                summary.keySet().stream().anyMatch(signature -> signature.contains("host=server1"))
+        );
 
-        assertEquals(3, info.getCount());
+        assertTrue(
+                summary.keySet().stream().anyMatch(signature -> signature.contains("host=server2"))
+        );
+
+        assertTrue(
+                summary.keySet().stream().anyMatch(signature -> signature.contains("host=server3"))
+        );
     }
 
     @Test

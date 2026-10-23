@@ -1,28 +1,29 @@
-package com.logai.deploy.util;
+package com.logai.deploy.ai;
 
 import com.logai.deploy.config.MaskProperties;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 
+import static org.junit.jupiter.api.Assertions.assertNull;
 import static org.junit.jupiter.api.Assertions.assertFalse;
 import static org.junit.jupiter.api.Assertions.assertTrue;
 
-class MaskUtilTests {
+class PIIMaskingAdvisorTests {
 
     private MaskProperties properties;
-    private MaskUtil maskUtil;
+    private PIIMaskingAdvisor piiMaskingAdvisor;
 
     @BeforeEach
     void setUp() {
         properties = new MaskProperties();
-        maskUtil = new MaskUtil(properties);
+        piiMaskingAdvisor = new PIIMaskingAdvisor(properties);
     }
 
     @Test
     void masksIpv4Address() {
 
         String result =
-                maskUtil.mask("Connection from 192.168.1.100 failed");
+                piiMaskingAdvisor.mask("Connection from 192.168.1.100 failed");
 
         assertTrue(result.contains("[REDACTED_IP]"));
         assertFalse(result.contains("192.168.1.100"));
@@ -32,7 +33,7 @@ class MaskUtilTests {
     void masksEmailAddress() {
 
         String result =
-                maskUtil.mask("User john.doe@example.com failed");
+                piiMaskingAdvisor.mask("User john.doe@example.com failed");
 
         assertTrue(result.contains("[REDACTED_EMAIL]"));
         assertFalse(result.contains("john.doe@example.com"));
@@ -45,7 +46,7 @@ class MaskUtilTests {
                 "550e8400-e29b-41d4-a716-446655440000";
 
         String result =
-                maskUtil.mask("Request id=" + uuid);
+                piiMaskingAdvisor.mask("Request id=" + uuid);
 
         assertTrue(result.contains("[REDACTED_UUID]"));
         assertFalse(result.contains(uuid));
@@ -55,7 +56,7 @@ class MaskUtilTests {
     void masksMacAddress() {
 
         String result =
-                maskUtil.mask("MAC 00:1A:2B:3C:4D:5E");
+                piiMaskingAdvisor.mask("MAC 00:1A:2B:3C:4D:5E");
 
         assertTrue(result.contains("[REDACTED_MAC]"));
         assertFalse(result.contains("00:1A:2B:3C:4D:5E"));
@@ -68,7 +69,7 @@ class MaskUtilTests {
                 "jdbc:postgresql://localhost:5432/mydb";
 
         String result =
-                maskUtil.mask("Database=" + jdbc);
+                piiMaskingAdvisor.mask("Database=" + jdbc);
 
         assertTrue(result.contains("[REDACTED_JDBC]"));
         assertFalse(result.contains(jdbc));
@@ -78,7 +79,7 @@ class MaskUtilTests {
     void masksHost() {
 
         String result =
-                maskUtil.mask("Connection failed host=production-server");
+                piiMaskingAdvisor.mask("Connection failed host=production-server");
 
         assertTrue(
                 result.contains("host=[REDACTED_HOST]")
@@ -93,7 +94,7 @@ class MaskUtilTests {
     void masksCommonName() {
 
         String result =
-                maskUtil.mask("Certificate CN=production.example.com");
+                piiMaskingAdvisor.mask("Certificate CN=production.example.com");
 
         assertTrue(
                 result.contains("CN=[REDACTED_CN]")
@@ -108,7 +109,7 @@ class MaskUtilTests {
     void masksId() {
 
         String result =
-                maskUtil.mask("Request ID=12345678");
+                piiMaskingAdvisor.mask("Request ID=12345678");
 
         assertTrue(
                 result.contains("ID=[REDACTED_ID]")
@@ -126,7 +127,7 @@ class MaskUtilTests {
                 "AA:BB:CC:DD:EE:FF:11:22:33:44:55:66:77:88:99:AA:BB:CC:DD:EE";
 
         String result =
-                maskUtil.mask("fingerprint=" + fingerprint);
+                piiMaskingAdvisor.mask("fingerprint=" + fingerprint);
 
         assertTrue(
                 result.contains("[REDACTED_FINGERPRINT]")
@@ -140,13 +141,13 @@ class MaskUtilTests {
     @Test
     void nullInputIsReturnedAsNull() {
 
-        assertTrue(maskUtil.mask(null) == null);
+        assertNull(piiMaskingAdvisor.mask(null));
     }
 
     @Test
     void emptyInputIsReturnedUnchanged() {
 
-        assertTrue(maskUtil.mask("").isEmpty());
+        assertTrue(piiMaskingAdvisor.mask("").isEmpty());
     }
 
     @Test
@@ -158,7 +159,7 @@ class MaskUtilTests {
                 "john.doe@example.com";
 
         String result =
-                maskUtil.mask(email);
+                piiMaskingAdvisor.mask(email);
 
         assertTrue(result.contains(email));
     }
@@ -166,7 +167,7 @@ class MaskUtilTests {
     @Test
     void multipleSensitiveValuesAreMasked() {
 
-        String result = maskUtil.mask(
+        String result = piiMaskingAdvisor.mask(
                 "user=john@example.com ip=10.20.30.40"
         );
 
@@ -186,4 +187,19 @@ class MaskUtilTests {
                 result.contains("10.20.30.40")
         );
     }
+
+    @Test
+    void masksChannelTokenAndPortInLogStyleText() {
+
+        String result = piiMaskingAdvisor.mask(
+                "Closing channel ch=97277f1f remote=localhost/10.1.2.3:7919"
+        );
+
+        assertTrue(result.contains("ch=[CHAN]"));
+        assertTrue(result.contains("[REDACTED_IP]:[PORT]"));
+        assertFalse(result.contains("97277f1f"));
+        assertFalse(result.contains("10.1.2.3:7919"));
+    }
 }
+
+

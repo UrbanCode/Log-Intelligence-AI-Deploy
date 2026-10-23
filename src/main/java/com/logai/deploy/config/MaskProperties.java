@@ -17,7 +17,7 @@ import java.util.Properties;
 @Setter
 public class MaskProperties {
 
-    private boolean ip = true;
+    private boolean ipPort = true;
     private boolean email = true;
     private boolean uuid = true;
     private boolean mac = true;
@@ -26,7 +26,6 @@ public class MaskProperties {
     private boolean cn = true;
     private boolean id = true;
     private boolean fingerprint = true;
-    private boolean filePath = true;
 
     public void applyOverrides(String propertiesFile) throws IOException {
 
@@ -47,8 +46,8 @@ public class MaskProperties {
             String value = overrides.getProperty(key);
 
             switch (key) {
-                case "mask.ip" ->
-                        ip = parseBoolean(value, key);
+                        case "mask.ip_port" ->
+                                ipPort = parseBoolean(value, key);
 
                 case "mask.email" ->
                         email = parseBoolean(value, key);
@@ -74,8 +73,6 @@ public class MaskProperties {
                 case "mask.fingerprint" ->
                         fingerprint = parseBoolean(value, key);
 
-                case "mask.file-path", "mask.filepath" ->
-                        filePath = parseBoolean(value, key);
 
                 default ->
                     // Ignore unknown mask properties.

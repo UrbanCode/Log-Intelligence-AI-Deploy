@@ -30,6 +30,9 @@ public class CliOptionsParser {
         String aiPrompt =
                 firstOption("aiPrompt");
 
+        Integer aiMaxErrors =
+                parseIntegerOption("aiMaxErrors");
+
         boolean skipAiModelCheck =
                 isTrueOption("skipAiModelCheck");
 
@@ -41,6 +44,7 @@ public class CliOptionsParser {
                 aiPrompt == null
                         ? null
                         : Path.of(aiPrompt),
+                aiMaxErrors,
                 skipAiModelCheck
         );
     }
@@ -83,8 +87,29 @@ public class CliOptionsParser {
         String value =
                 firstOption(name);
 
-        return value != null
-                && "true".equalsIgnoreCase(value);
+        return "true".equalsIgnoreCase(value);
+    }
+
+    private Integer parseIntegerOption(String name) {
+
+        String value = firstOption(name);
+
+        if (value == null || value.isBlank()) {
+            return null;
+        }
+
+        try {
+            return Integer.parseInt(value.trim());
+
+        } catch (NumberFormatException ex) {
+            throw new IllegalArgumentException(
+                    "Invalid value for --"
+                            + name
+                            + ": "
+                            + value
+                            + ". Expected an integer."
+            );
+        }
     }
 
     public void printUsage() {
@@ -98,6 +123,7 @@ public class CliOptionsParser {
                         + "--inputLog=<logfile> "
                         + "[--maskConfig=<mask.properties>] "
                         + "[--aiPrompt=<prompt.txt>] "
+                        + "[--aiMaxErrors=<number>] "
                         + "[--skipAiModelCheck=true]"
         );
     }
